@@ -1,13 +1,17 @@
 import React, { createContext, useContext, useEffect, useState, useCallback } from 'react';
-import { AIConfig, OpenRouterModel } from '../types';
+import { AIConfig, OpenRouterModel, DynamicPrompt } from '../types';
+import { useQuery, useMutation } from 'convex/react';
+import { api } from '../convex/_generated/api';
 
 interface AISettingsContextType extends AIConfig {
     models: OpenRouterModel[];
+    prompts: DynamicPrompt[];
     isSettingsOpen: boolean;
     loadingModels: boolean;
     setApiKey: (key: string) => void;
     setTextModel: (model: string) => void;
     setImageModel: (model: string) => void;
+    updatePrompt: (id: string, content: string, description?: string) => Promise<void>;
     openSettings: () => void;
     closeSettings: () => void;
     refreshModels: () => void;
@@ -29,6 +33,11 @@ export const AISettingsProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     // Models cache state
     const [models, setModels] = useState<OpenRouterModel[]>([]);
     const [loadingModels, setLoadingModels] = useState(false);
+
+    // Prompts from Convex
+    const prompts = useQuery(api.prompts.list) || [];
+    const updatePromptMutation = useMutation(api.prompts.update);
+    const seedMutation = useMutation(api.prompts.seed);
 
     // Initialize from localStorage
     useEffect(() => {
@@ -98,10 +107,15 @@ export const AISettingsProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     const openSettings = useCallback(() => setIsSettingsOpen(true), []);
     const closeSettings = useCallback(() => setIsSettingsOpen(false), []);
 
+    const updatePrompt = async (id: string, content: string, description?: string) => {
+        await updatePromptMutation({ id: id as any, content, changeDescription: description });
+    };
+
     return (
         <AISettingsContext.Provider value={{
             apiKey, textModel, imageModel, setApiKey, setTextModel, setImageModel,
-            models, isSettingsOpen, loadingModels, openSettings, closeSettings, refreshModels
+            models, prompts, isSettingsOpen, loadingModels, openSettings, closeSettings, refreshModels,
+            updatePrompt
         }}>
             {children}
         </AISettingsContext.Provider>

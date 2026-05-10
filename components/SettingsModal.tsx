@@ -1,7 +1,8 @@
 import React, { useState, useMemo, useEffect } from 'react';
 import { useAISettings } from './AISettingsContext';
-import { X, Search, Eye, EyeOff, RefreshCw, Key, Image as ImageIcon, MessageSquare, Check } from 'lucide-react';
+import { X, Search, Eye, EyeOff, RefreshCw, Key, Image as ImageIcon, MessageSquare, Check, Settings, Terminal } from 'lucide-react';
 import { OpenRouterModel } from '../types';
+import PromptManager from './PromptManager';
 
 const SettingsModal: React.FC = () => {
     const { 
@@ -12,6 +13,7 @@ const SettingsModal: React.FC = () => {
         models, loadingModels, refreshModels 
     } = useAISettings();
 
+    const [activeTab, setActiveTab] = useState<'general' | 'prompts'>('general');
     const [tempKey, setTempKey] = useState(apiKey);
     const [showKey, setShowKey] = useState(false);
     
@@ -34,7 +36,6 @@ const SettingsModal: React.FC = () => {
     const textModels = useMemo(() => {
         return models.filter(m => {
             const mods = m.architecture?.output_modalities || [];
-            // "text" is typical or no explicit output implies text usually, but OpenRouter provides "text" explicitly a lot.
             return mods.includes("text") || mods.length === 0; 
         });
     }, [models]);
@@ -142,12 +143,34 @@ const SettingsModal: React.FC = () => {
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4">
             <div className="absolute inset-0 bg-black/60 backdrop-blur-sm" onClick={closeSettings} />
             
-            <div className="relative w-full max-w-4xl max-h-[90vh] flex flex-col bg-surface border border-border rounded-xl shadow-2xl overflow-hidden animate-fadeIn">
+            <div className="relative w-full max-w-5xl max-h-[90vh] flex flex-col bg-surface border border-border rounded-xl shadow-2xl overflow-hidden animate-fadeIn">
                 {/* Header */}
                 <div className="p-5 border-b border-border flex justify-between items-center sticky top-0 bg-surface z-10">
-                    <div className="flex items-center gap-2">
-                        <Key className="w-5 h-5 text-accent" />
-                        <h2 className="text-xl font-bold text-textMain">Configuración de IA</h2>
+                    <div className="flex items-center gap-6">
+                        <div className="flex items-center gap-2 pr-6 border-r border-border">
+                            <Settings className="w-5 h-5 text-accent" />
+                            <h2 className="text-xl font-bold text-textMain">Configuración</h2>
+                        </div>
+                        <div className="flex gap-4">
+                            <button 
+                                onClick={() => setActiveTab('general')}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                                    activeTab === 'general' ? 'bg-textMain text-background shadow-lg shadow-textMain/20' : 'text-textSec hover:text-textMain hover:bg-surfaceHover'
+                                }`}
+                            >
+                                <Key className="w-4 h-4" />
+                                General
+                            </button>
+                            <button 
+                                onClick={() => setActiveTab('prompts')}
+                                className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold transition-all ${
+                                    activeTab === 'prompts' ? 'bg-textMain text-background shadow-lg shadow-textMain/20' : 'text-textSec hover:text-textMain hover:bg-surfaceHover'
+                                }`}
+                            >
+                                <Terminal className="w-4 h-4" />
+                                Prompts de IA
+                            </button>
+                        </div>
                     </div>
                     <button onClick={closeSettings} className="text-textSec hover:text-textMain p-1 rounded hover:bg-surfaceHover">
                         <X className="w-5 h-5" />
@@ -155,92 +178,101 @@ const SettingsModal: React.FC = () => {
                 </div>
 
                 {/* Body */}
-                <div className="flex-1 overflow-y-auto p-6">
-                    <div className="bg-accentAmber/10 border border-accentAmber/30 rounded-lg p-4 mb-6">
-                        <p className="text-sm text-amber-600 dark:text-amber-200/80 mb-2">
-                            <strong>Bring Your Own Key (BYOK)</strong>: LaunchKit requiere tu propia clave de OpenRouter para funcionar. Tu clave se guarda exclusivamente en tu navegador (localStorage) y nunca se envía a nuestros servidores.
-                        </p>
-                        <a 
-                            href="https://openrouter.ai/settings/keys" 
-                            target="_blank" 
-                            rel="noopener noreferrer"
-                            className="text-xs text-amber-600 dark:text-accent hover:underline flex items-center gap-1"
-                        >
-                            Obtener clave en OpenRouter.ai ↗
-                        </a>
-                    </div>
+                <div className="flex-1 overflow-y-auto p-6 min-h-[500px]">
+                    {activeTab === 'general' ? (
+                        <div className="max-w-3xl mx-auto animate-fadeIn">
+                            <div className="bg-accentAmber/10 border border-accentAmber/30 rounded-lg p-4 mb-6">
+                                <p className="text-sm text-amber-600 dark:text-amber-200/80 mb-2 font-medium">
+                                    LaunchKit requiere tu propia clave de OpenRouter. Tu clave se guarda localmente en tu navegador.
+                                </p>
+                                <a 
+                                    href="https://openrouter.ai/settings/keys" 
+                                    target="_blank" 
+                                    rel="noopener noreferrer"
+                                    className="text-xs text-amber-600 dark:text-accent hover:underline flex items-center gap-1"
+                                >
+                                    Obtener clave en OpenRouter.ai ↗
+                                </a>
+                            </div>
 
-                    <div className="mb-6">
-                        <label className="block text-sm font-bold text-textMain mb-2">API Key de OpenRouter</label>
-                        <div className="relative">
-                            <input 
-                                type={showKey ? "text" : "password"}
-                                className="w-full bg-background border border-border rounded-lg pl-3 pr-10 py-3 text-textMain focus:outline-none focus:border-accent font-mono text-sm"
-                                placeholder="sk-or-v1-..."
-                                value={tempKey}
-                                onChange={(e) => setTempKey(e.target.value)}
-                            />
-                            <button 
-                                onClick={() => setShowKey(!showKey)}
-                                className="absolute right-3 top-1/2 -translate-y-1/2 text-textSec hover:text-textMain"
-                            >
-                                {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                            </button>
+                            <div className="mb-8">
+                                <label className="block text-sm font-bold text-textMain mb-2 uppercase tracking-wider">API Key de OpenRouter</label>
+                                <div className="relative">
+                                    <input 
+                                        type={showKey ? "text" : "password"}
+                                        className="w-full bg-background border border-border rounded-lg pl-3 pr-10 py-3 text-textMain focus:outline-none focus:border-accent font-mono text-sm shadow-inner"
+                                        placeholder="sk-or-v1-..."
+                                        value={tempKey}
+                                        onChange={(e) => setTempKey(e.target.value)}
+                                    />
+                                    <button 
+                                        onClick={() => setShowKey(!showKey)}
+                                        className="absolute right-3 top-1/2 -translate-y-1/2 text-textSec hover:text-textMain"
+                                    >
+                                        {showKey ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                                    </button>
+                                </div>
+                            </div>
+
+                            {renderModelSelector(
+                                'text',
+                                <MessageSquare className="w-5 h-5 text-blue-400" />,
+                                'Modelo de Texto',
+                                textModels,
+                                textSearch,
+                                setTextSearch,
+                                tempTextModel,
+                                setTempTextModel
+                            )}
+
+                            {renderModelSelector(
+                                'image',
+                                <ImageIcon className="w-5 h-5 text-pink-400" />,
+                                'Modelo de Imágenes',
+                                imageModels,
+                                imageSearch,
+                                setImageSearch,
+                                tempImageModel,
+                                setTempImageModel
+                            )}
                         </div>
-                    </div>
-
-                    {renderModelSelector(
-                        'text',
-                        <MessageSquare className="w-5 h-5 text-blue-400" />,
-                        'Modelo de Texto',
-                        textModels,
-                        textSearch,
-                        setTextSearch,
-                        tempTextModel,
-                        setTempTextModel
+                    ) : (
+                        <PromptManager />
                     )}
-
-                    {renderModelSelector(
-                        'image',
-                        <ImageIcon className="w-5 h-5 text-pink-400" />,
-                        'Modelo de Imágenes',
-                        imageModels,
-                        imageSearch,
-                        setImageSearch,
-                        tempImageModel,
-                        setTempImageModel
-                    )}
-
                 </div>
 
                 {/* Footer */}
                 <div className="p-4 border-t border-border bg-surface sticky bottom-0 z-10 flex justify-between items-center">
-                    <button 
-                        onClick={() => {
-                            setTextSearch('');
-                            setImageSearch('');
-                            refreshModels();
-                        }}
-                        disabled={loadingModels}
-                        className="text-sm text-textSec hover:text-textMain flex items-center gap-2"
-                    >
-                        <RefreshCw className={`w-4 h-4 ${loadingModels ? 'animate-spin' : ''}`} /> 
-                        {loadingModels ? 'Actualizando...' : 'Actualizar catálogo'}
-                    </button>
+                    {activeTab === 'general' ? (
+                        <button 
+                            onClick={() => {
+                                setTextSearch('');
+                                setImageSearch('');
+                                refreshModels();
+                            }}
+                            disabled={loadingModels}
+                            className="text-sm text-textSec hover:text-textMain flex items-center gap-2"
+                        >
+                            <RefreshCw className={`w-4 h-4 ${loadingModels ? 'animate-spin' : ''}`} /> 
+                            {loadingModels ? 'Actualizando...' : 'Actualizar catálogo'}
+                        </button>
+                    ) : <div></div>}
                     <div className="flex gap-3">
                         <button 
                             onClick={closeSettings}
                             className="px-4 py-2 border border-border rounded-lg font-medium hover:bg-surfaceHover transition-colors text-sm"
                         >
-                            Cancelar
+                            Cerrar
                         </button>
-                        <button 
-                            onClick={handleSave}
-                            disabled={!tempKey.trim()}
-                            className="px-6 py-2 bg-textMain text-background rounded-lg font-bold hover:opacity-90 transition-opacity disabled:opacity-50 text-sm shadow-lg shadow-textMain/10"
-                        >
-                            Guardar Configuración
-                        </button>
+                        {activeTab === 'general' && (
+                            <button 
+                                onClick={handleSave}
+                                disabled={!tempKey.trim()}
+                                className="px-6 py-2 bg-textMain text-background rounded-lg font-bold hover:opacity-90 transition-opacity disabled:opacity-50 text-sm shadow-lg shadow-textMain/10"
+                            >
+                                Guardar Configuración
+                            </button>
+                        )}
                     </div>
                 </div>
             </div>

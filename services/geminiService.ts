@@ -2,6 +2,12 @@ import { ContentItem, ContentStatus, Project, WeekPhase, LaunchKitType, AIConfig
 
 // Note: GoogleGenAI SDK removed in favor of OpenRouter centralisation.
 
+// Prompt Helper
+const getPrompt = (config: AIConfig, key: string, fallback: string): string => {
+    const prompt = config.prompts?.find(p => p.key === key);
+    return prompt?.content || fallback;
+};
+
 // Error Translation Helper
 export const translateAIError = (error: any): string => {
     const errorStr = typeof error === 'string' ? error : JSON.stringify(error);
@@ -62,7 +68,7 @@ const callOpenRouter = async (messages: any[], apiKey: string, model: string, js
 
 // 1. Extract PRD
 export const extractPRD = async (prdText: string, config: AIConfig) => {
-  const prompt = `Analiza el siguiente texto (PRD o descripción de producto) y extrae la información estructurada en JSON.
+  const fallback = `Analiza el siguiente texto (PRD o descripción de producto) y extrae la información estructurada en JSON.
   Responde SIEMPRE en español.
   Responde ÚNICAMENTE con un objeto JSON válido con la siguiente estructura:
   {
@@ -72,7 +78,10 @@ export const extractPRD = async (prdText: string, config: AIConfig) => {
       "problemSolved": "Problema que resuelve"
   }
   
-  Texto: "${prdText}"`;
+  Texto: "{prdText}"`;
+
+  const promptTemplate = getPrompt(config, "extractPRD", fallback);
+  const prompt = promptTemplate.replace("{prdText}", prdText);
 
   try {
     const jsonStr = await callOpenRouter([{ role: "user", content: prompt }], config.apiKey, config.textModel, true);
@@ -86,15 +95,16 @@ export const extractPRD = async (prdText: string, config: AIConfig) => {
 // 2. Generate Monthly Plan with Grounding & Thinking
 export const generateMonthlyPlan = async (project: Project, useSearch: boolean = true, config: AIConfig): Promise<ContentItem[]> => {
   const model = useSearch ? "google/gemini-3.1-pro-preview" : config.textModel;
-  
-  const prompt = `Actúa como LaunchKit, un estratega de contenido experto. Genera un plan de contenido mensual (4 semanas) para el siguiente producto:
-  
-  Nombre: ${project.name}
-  Descripción: ${project.description}
-  Audiencia: ${project.targetAudience}
-  Problema que resuelve: ${project.problemSolved}
+  const searchContext = useSearch ? 'Usa tus capacidades de búsqueda web para encontrar tendencias ACTUALES que sean relevantes para este producto o su industria. Si encuentras una tendencia relevante, marca el contenido como "isTrend": true e incluye el contexto en "trendContext".' : 'NO busques noticias recientes. Céntrate en pilares de contenido sólidos y estratégicos (Evergreen).';
 
-  ${useSearch ? 'Usa tus capacidades de búsqueda web para encontrar tendencias ACTUALES que sean relevantes para este producto o su industria. Si encuentras una tendencia relevante, marca el contenido como "isTrend": true e incluye el contexto en "trendContext".' : 'NO busques noticias recientes. Céntrate en pilares de contenido sólidos y estratégicos (Evergreen).'}
+  const fallback = `Actúa como LaunchKit, un estratega de contenido experto. Genera un plan de contenido mensual (4 semanas) para el siguiente producto:
+  
+  Nombre: {project.name}
+  Descripción: {project.description}
+  Audiencia: {project.targetAudience}
+  Problema que resuelve: {project.problemSolved}
+
+  {searchContext}
   
   Estructura del plan (4 semanas, EXACTAMENTE 5 ideas por semana):
   - Semana 1 (5 ideas variadas)
@@ -125,6 +135,14 @@ export const generateMonthlyPlan = async (project: Project, useSearch: boolean =
     "isTrend": boolean,
     "trendContext": "Contexto de la tendencia si existe"
   }`;
+
+  const promptTemplate = getPrompt(config, "generateMonthlyPlan", fallback);
+  const prompt = promptTemplate
+    .replace("{project.name}", project.name)
+    .replace("{project.description}", project.description)
+    .replace("{project.targetAudience}", project.targetAudience)
+    .replace("{project.problemSolved}", project.problemSolved)
+    .replace("{searchContext}", searchContext);
 
   try {
     const jsonStr = await callOpenRouter([{ role: "user", content: prompt }], config.apiKey, model, true);
@@ -157,11 +175,11 @@ export const generateMonthlyPlan = async (project: Project, useSearch: boolean =
 
 // 2.5 Generate Single Idea (OpenRouter)
 export const generateSingleIdea = async (project: Project, week: WeekPhase, config: AIConfig): Promise<ContentItem> => {
-    const prompt = `Genera UNA (1) idea de contenido de marketing creativa y única para la: "${week}".
+    const fallback = `Genera UNA (1) idea de contenido de marketing creativa y única para la: "{week}".
     
-    Producto: ${project.name}
-    Descripción: ${project.description}
-    Target: ${project.targetAudience}
+    Producto: {project.name}
+    Descripción: {project.description}
+    Target: {project.targetAudience}
   
     Tipos permitidos: "Post X", "Post LinkedIn", "Post Instagram", "Email".
     Selecciona uno aleatoriamente.
@@ -174,6 +192,13 @@ export const generateSingleIdea = async (project: Project, week: WeekPhase, conf
         "isTrend": false,
         "trendContext": ""
     }`;
+
+    const promptTemplate = getPrompt(config, "generateSingleIdea", fallback);
+    const prompt = promptTemplate
+        .replace("{week}", week)
+        .replace("{project.name}", project.name)
+        .replace("{project.description}", project.description)
+        .replace("{project.targetAudience}", project.targetAudience);
   
     try {
         const jsonStr = await callOpenRouter([{ role: "user", content: prompt }], config.apiKey, config.textModel, true);
@@ -192,17 +217,19 @@ export const generateSingleIdea = async (project: Project, week: WeekPhase, conf
 
 // 3. Generate Copy (OpenRouter)
 export const generateCopy = async (item: ContentItem, project: Project, config: AIConfig) => {
-  const prompt = `Genera el texto FINAL listo para publicar para este contenido de marketing.
+  const trendInfo = item.isTrend ? `Conectado a tendencia: ${item.trendContext}` : '';
   
-  Producto: ${project.name}
-  Descripción: ${project.description}
-  Target: ${project.targetAudience}
+  const fallback = `Genera el texto FINAL listo para publicar para este contenido de marketing.
+  
+  Producto: {project.name}
+  Descripción: {project.description}
+  Target: {project.targetAudience}
   
   Detalles del contenido:
-  Tipo: ${item.contentType}
-  Título/Idea: ${item.title}
-  Ángulo: ${item.angle}
-  ${item.isTrend ? `Conectado a tendencia: ${item.trendContext}` : ''}
+  Tipo: {item.contentType}
+  Título/Idea: {item.title}
+  Ángulo: {item.angle}
+  {trendInfo}
   
   REGLAS:
   1. SOLO devuelve el texto del contenido. 
@@ -211,32 +238,54 @@ export const generateCopy = async (item: ContentItem, project: Project, config: 
   4. Si es Email: Primera línea el Asunto, salta dos líneas, y luego el cuerpo.
   5. Escribe en Español. Tono profesional pero cercano.`;
 
+  const promptTemplate = getPrompt(config, "generateCopy", fallback);
+  const prompt = promptTemplate
+    .replace("{project.name}", project.name)
+    .replace("{project.description}", project.description)
+    .replace("{project.targetAudience}", project.targetAudience)
+    .replace("{item.contentType}", item.contentType)
+    .replace("{item.title}", item.title)
+    .replace("{item.angle}", item.angle)
+    .replace("{trendInfo}", trendInfo);
+
   return await callOpenRouter([{ role: "user", content: prompt }], config.apiKey, config.textModel, false);
 };
 
 // 4. Refine Copy (OpenRouter)
 export const refineCopy = async (currentCopy: string, instruction: string, config: AIConfig) => {
-  const prompt = `Reescribe el siguiente texto aplicando la instrucción dada.
+  const fallback = `Reescribe el siguiente texto aplicando la instrucción dada.
   
   Texto original:
-  "${currentCopy}"
+  "{currentCopy}"
   
   Instrucción:
-  "${instruction}"
+  "{instruction}"
   
   REGLAS:
   1. Devuelve SOLAMENTE el texto reescrito en español.
   2. PROHIBIDO usar Markdown.
   3. Sin explicaciones.`;
 
+  const promptTemplate = getPrompt(config, "refineCopy", fallback);
+  const prompt = promptTemplate
+    .replace("{currentCopy}", currentCopy)
+    .replace("{instruction}", instruction);
+
   return await callOpenRouter([{ role: "user", content: prompt }], config.apiKey, config.textModel, false);
 };
 
 // 5. Generate Image (OpenRouter Flux 2)
 export const generateImage = async (item: ContentItem, project: Project, aspectRatio: string, config: AIConfig) => {
-  const prompt = `Attractive marketing image for a project named "${project.name}". 
-  Context: ${item.title}. Angle: ${item.angle}. 
-  Aspect Ratio: ${aspectRatio}`; 
+  const fallback = `Attractive marketing image for a project named "{project.name}". 
+  Context: {item.title}. Angle: {item.angle}. 
+  Aspect Ratio: {aspectRatio}`; 
+
+  const promptTemplate = getPrompt(config, "generateImage", fallback);
+  const prompt = promptTemplate
+    .replace("{project.name}", project.name)
+    .replace("{item.title}", item.title)
+    .replace("{item.angle}", item.angle)
+    .replace("{aspectRatio}", aspectRatio);
 
   const API_KEY = config.apiKey;
   if (!API_KEY) {
@@ -295,28 +344,41 @@ export const generateImage = async (item: ContentItem, project: Project, aspectR
 
 // === LAUNCH KIT GENERATION ===
 
-const getLaunchKitPrompt = (type: LaunchKitType, project: Project) => {
-    const baseInfo = `Producto: ${project.name}. Descripción: ${project.description}. Target: ${project.targetAudience}.`;
+const getLaunchKitPrompt = (type: LaunchKitType, project: Project, config: AIConfig) => {
+    let key = "";
+    let fallback = "";
     
     switch (type) {
         case 'emails':
-            return `Genera 3 emails de marketing para el lanzamiento. ${baseInfo}
+            key = "emailsLaunchKit";
+            fallback = `Genera 3 emails de marketing para el lanzamiento. Producto: {project.name}. Descripción: {project.description}. Target: {project.targetAudience}.
             Escribe asunto y cuerpo.
             Responde ÚNICAMENTE con JSON:
             { "teaser": "texto", "lanzamiento": "texto", "recordatorio": "texto" }`;
+            break;
         case 'productHunt':
-            return `Genera textos para Product Hunt. ${baseInfo}
+            key = "productHuntLaunchKit";
+            fallback = `Genera textos para Product Hunt. Producto: {project.name}. Descripción: {project.description}. Target: {project.targetAudience}.
             Responde ÚNICAMENTE con JSON:
             { "tagline": "texto max 60 chars", "descripcion": "texto intro", "primerComentario": "texto comentario" }`;
+            break;
         case 'directories':
-            return `Genera descripciones para directorios. ${baseInfo}
+            key = "directoriesLaunchKit";
+            fallback = `Genera descripciones para directorios. Producto: {project.name}. Descripción: {project.description}. Target: {project.targetAudience}.
             Responde ÚNICAMENTE con JSON:
             { "descripcionCorta": "texto", "descripcionLarga": "texto" }`;
+            break;
     }
+
+    const promptTemplate = getPrompt(config, key, fallback);
+    return promptTemplate
+        .replace("{project.name}", project.name)
+        .replace("{project.description}", project.description)
+        .replace("{project.targetAudience}", project.targetAudience);
 };
 
 export const generateLaunchKitContent = async (type: LaunchKitType, project: Project, config: AIConfig) => {
-    const prompt = getLaunchKitPrompt(type, project);
+    const prompt = getLaunchKitPrompt(type, project, config);
     try {
         const jsonStr = await callOpenRouter([{ role: "user", content: prompt }], config.apiKey, config.textModel, true);
         return JSON.parse(jsonStr || "{}");
@@ -327,15 +389,19 @@ export const generateLaunchKitContent = async (type: LaunchKitType, project: Pro
 };
 
 export const refineLaunchKitContent = async (type: LaunchKitType, currentContent: any, instruction: string, config: AIConfig) => {
-    const prompt = `Reescribe los siguientes textos aplicando esta instrucción: "${instruction}".
+    const prompt = `Reescribe los siguientes textos aplicando esta instrucción: "{instruction}".
     
     Contenido actual:
-    ${JSON.stringify(currentContent)}
+    {currentContent}
     
     Mantén la estructura JSON exacta. Solo modifica los textos.`;
 
+    const refinedPrompt = prompt
+        .replace("{instruction}", instruction)
+        .replace("{currentContent}", JSON.stringify(currentContent));
+
     try {
-        const jsonStr = await callOpenRouter([{ role: "user", content: prompt }], config.apiKey, config.textModel, true);
+        const jsonStr = await callOpenRouter([{ role: "user", content: refinedPrompt }], config.apiKey, config.textModel, true);
         return JSON.parse(jsonStr || "{}");
     } catch(e) {
         console.error(e);

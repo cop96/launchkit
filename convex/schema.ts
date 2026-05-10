@@ -60,4 +60,18 @@ export default defineSchema({
       })
     ),
   }),
+  prompts: defineTable({
+    key: v.string(), // e.g. "extractPRD", "generateMonthlyPlan"
+    name: v.string(), // Human readable name
+    description: v.string(), // What this prompt does
+    content: v.string(), // The prompt text
+    updatedAt: v.number(),
+  }).index("by_key", ["key"]),
+
+  promptHistory: defineTable({
+    promptId: v.id("prompts"),
+    content: v.string(),
+    createdAt: v.number(),
+    changeDescription: v.optional(v.string()),
+  }).index("by_promptId", ["promptId"]),
 });

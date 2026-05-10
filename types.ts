@@ -77,6 +77,7 @@ export interface AIConfig {
   apiKey: string;
   textModel: string;
   imageModel: string;
+  prompts: DynamicPrompt[];
 }
 
 export interface OpenRouterModel {
@@ -92,4 +93,20 @@ export interface OpenRouterModel {
     completion?: string;
     image?: string;
   };
+}
+export interface DynamicPrompt {
+  _id: string;
+  key: string;
+  name: string;
+  description: string;
+  content: string;
+  updatedAt: number;
+}
+
+export interface PromptHistory {
+  _id: string;
+  promptId: string;
+  content: string;
+  createdAt: number;
+  changeDescription?: string;
 }
